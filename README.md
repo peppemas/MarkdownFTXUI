@@ -1,4 +1,4 @@
-# MarkdownFTXUI
+# MarkdownFTXUI (with table support) 
 
 A C++ library for rendering and editing Markdown directly in the terminal. Built on [FTXUI](https://github.com/ArthurSonzogni/FTXUI), it gives TUI applications a rich-text Markdown viewer with headings, inline formatting, navigable links, code blocks, and lists — plus a syntax-highlighted editor with line numbers and live preview. Ideal for terminal-based note-taking apps, email clients, documentation browsers, or any TUI that needs to display or edit Markdown content.
 
