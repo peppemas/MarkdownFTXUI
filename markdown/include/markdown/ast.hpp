@@ -23,6 +23,9 @@ enum class NodeType {
     HardBreak,
     ThematicBreak,
     Image,
+    Table,      // container: rows
+    TableRow,   // container: cells; level=1 for header row, level=0 for body
+    TableCell,  // leaf or inline container
 };
 
 struct ASTNode {

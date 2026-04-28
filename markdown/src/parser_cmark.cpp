@@ -1,12 +1,48 @@
 #include "markdown/parser.hpp"
 
 #include <cmark-gfm.h>
+#include <cmark-gfm-extension_api.h>
+#include <cmark-gfm-core-extensions.h>
 
 namespace markdown {
 namespace {
 
 ASTNode convert_node(cmark_node* node) {
     ASTNode result;
+
+    // Check type string first to handle GFM extension nodes (table, etc.)
+    // which don't appear in the standard cmark_node_type enum.
+    char const* type_str = cmark_node_get_type_string(node);
+
+    if (type_str != nullptr) {
+        if (std::string_view(type_str) == "table") {
+            result.type = NodeType::Table;
+            for (auto* child = cmark_node_first_child(node); child;
+                 child = cmark_node_next(child)) {
+                result.children.push_back(convert_node(child));
+            }
+            return result;
+        }
+        if (std::string_view(type_str) == "table_row" ||
+            std::string_view(type_str) == "table_header") {
+            result.type = NodeType::TableRow;
+            // level=1 for header row, level=0 for body row
+            result.level = (std::string_view(type_str) == "table_header") ? 1 : 0;
+            for (auto* child = cmark_node_first_child(node); child;
+                 child = cmark_node_next(child)) {
+                result.children.push_back(convert_node(child));
+            }
+            return result;
+        }
+        if (std::string_view(type_str) == "table_cell") {
+            result.type = NodeType::TableCell;
+            for (auto* child = cmark_node_first_child(node); child;
+                 child = cmark_node_next(child)) {
+                result.children.push_back(convert_node(child));
+            }
+            return result;
+        }
+    }
 
     switch (cmark_node_get_type(node)) {
     case CMARK_NODE_DOCUMENT:
@@ -126,8 +162,25 @@ ASTNode convert_node(cmark_node* node) {
 class CmarkParser : public MarkdownParser {
 public:
     bool parse(std::string_view input, MarkdownAST& out) override {
-        cmark_node* doc = cmark_parse_document(
-            input.data(), input.size(), CMARK_OPT_DEFAULT);
+        cmark_gfm_core_extensions_ensure_registered();
+
+        cmark_parser* parser =
+            cmark_parser_new(CMARK_OPT_DEFAULT);
+        if (!parser) {
+            out = ASTNode{.type = NodeType::Document};
+            return false;
+        }
+
+        cmark_syntax_extension* table_ext =
+            cmark_find_syntax_extension("table");
+        if (table_ext) {
+            cmark_parser_attach_syntax_extension(parser, table_ext);
+        }
+
+        cmark_parser_feed(parser, input.data(),
+                          static_cast<int>(input.size()));
+        cmark_node* doc = cmark_parser_finish(parser);
+        cmark_parser_free(parser);
 
         if (!doc) {
             // Parsing failed — provide raw text as fallback
