@@ -19,6 +19,8 @@ struct Theme {
     ftxui::Decorator code_inline;
     ftxui::Decorator code_block;
     ftxui::Decorator blockquote;
+    ftxui::Decorator table_header;  // applied to header row cells
+    ftxui::Decorator table_border;  // applied to separator/border elements
 };
 
 inline Theme const& theme_default() {
@@ -32,6 +34,8 @@ inline Theme const& theme_default() {
         ftxui::color(ftxui::Color::Blue),
         ftxui::inverted,
         ftxui::nothing,
+        ftxui::dim,
+        ftxui::bold,
         ftxui::dim,
     };
     return t;
@@ -48,6 +52,8 @@ inline Theme const& theme_high_contrast() {
         ftxui::color(ftxui::Color::CyanLight),
         ftxui::inverted,
         ftxui::nothing,
+        ftxui::nothing,
+        ftxui::bold,
         ftxui::nothing,
     };
     return t;
@@ -66,6 +72,8 @@ inline Theme const& theme_colorful() {
         ftxui::Decorator(ftxui::inverted) | ftxui::color(ftxui::Color::Yellow),
         ftxui::color(ftxui::Color::Green),
         ftxui::color(ftxui::Color::Blue),
+        ftxui::Decorator(ftxui::bold) | ftxui::color(ftxui::Color::Cyan),
+        ftxui::color(ftxui::Color::Blue) | ftxui::dim,
     };
     return t;
 }

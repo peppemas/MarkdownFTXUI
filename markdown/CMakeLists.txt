@@ -16,6 +16,8 @@ target_compile_definitions(markdown-ui PRIVATE CMARK_GFM_STATIC_DEFINE)
 target_include_directories(markdown-ui PRIVATE
     ${cmark-gfm_SOURCE_DIR}/src
     ${cmark-gfm_BINARY_DIR}/src
+    ${cmark-gfm_SOURCE_DIR}/extensions
+    ${cmark-gfm_BINARY_DIR}/extensions
 )
 
 target_link_libraries(markdown-ui
@@ -24,8 +26,8 @@ target_link_libraries(markdown-ui
         ftxui::dom
         ftxui::component
     PRIVATE
-        libcmark-gfm_static
         libcmark-gfm-extensions_static
+        libcmark-gfm_static
 )
 
 # --- Install targets ---

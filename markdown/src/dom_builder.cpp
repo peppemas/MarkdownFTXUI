@@ -1,6 +1,7 @@
 #include "markdown/dom_builder.hpp"
 #include "markdown/text_utils.hpp"
 
+#include <algorithm>
 #include <string_view>
 
 #include <ftxui/dom/flexbox_config.hpp>
@@ -371,6 +372,121 @@ ftxui::Element build_blockquote(ASTNode const& node, int depth, int qd,
     });
 }
 
+ftxui::Element build_table(ASTNode const& node, Theme const& theme) {
+    // Separate header rows (level=1) from body rows (level=0).
+    std::vector<ASTNode const*> header_rows;
+    std::vector<ASTNode const*> body_rows;
+    for (auto const& row : node.children) {
+        if (row.type != NodeType::TableRow) continue;
+        if (row.level == 1) {
+            header_rows.push_back(&row);
+        } else {
+            body_rows.push_back(&row);
+        }
+    }
+
+    // Collect cell texts for every row.
+    auto collect_row_texts =
+        [](std::vector<ASTNode const*> const& rows)
+        -> std::vector<std::vector<std::string>> {
+        std::vector<std::vector<std::string>> result;
+        result.reserve(rows.size());
+        for (auto const* row : rows) {
+            std::vector<std::string> cells;
+            cells.reserve(row->children.size());
+            for (auto const& cell : row->children) {
+                if (cell.type == NodeType::TableCell) {
+                    cells.push_back(collect_text(cell));
+                }
+            }
+            result.push_back(std::move(cells));
+        }
+        return result;
+    };
+
+    auto header_texts = collect_row_texts(header_rows);
+    auto body_texts   = collect_row_texts(body_rows);
+
+    // Determine column count.
+    size_t num_cols = 0;
+    for (auto const& r : header_texts) num_cols = std::max(num_cols, r.size());
+    for (auto const& r : body_texts)   num_cols = std::max(num_cols, r.size());
+    if (num_cols == 0) return ftxui::text("");
+
+    // Compute column widths.
+    std::vector<size_t> col_width(num_cols, 0);
+    auto update_widths = [&](std::vector<std::vector<std::string>> const& rows) {
+        for (auto const& row : rows) {
+            for (size_t c = 0; c < row.size() && c < num_cols; ++c) {
+                col_width[c] = std::max(col_width[c], row[c].size());
+            }
+        }
+    };
+    update_widths(header_texts);
+    update_widths(body_texts);
+
+    // Pad a string to a minimum width with a leading/trailing space.
+    auto make_cell = [](std::string const& text, size_t width) -> std::string {
+        std::string s = " " + text;
+        while (s.size() < width + 2) s += ' ';  // +2 for leading/trailing space
+        return s;
+    };
+
+    // Build a single row element from a list of cell strings.
+    auto build_row_element =
+        [&](std::vector<std::string> const& cells, bool is_header,
+            Theme const& t) -> ftxui::Element {
+        ftxui::Elements parts;
+        for (size_t c = 0; c < num_cols; ++c) {
+            std::string const& txt = (c < cells.size()) ? cells[c] : "";
+            auto cell_el = ftxui::text(make_cell(txt, col_width[c]));
+            if (is_header) cell_el = cell_el | t.table_header;
+            parts.push_back(std::move(cell_el));
+            if (c + 1 < num_cols) {
+                auto sep = ftxui::text("\u2502") | t.table_border;
+                parts.push_back(std::move(sep));
+            }
+        }
+        return ftxui::hbox(std::move(parts));
+    };
+
+    // Build the separator line between header and body.
+    auto build_separator = [&](Theme const& t) -> ftxui::Element {
+        ftxui::Elements parts;
+        for (size_t c = 0; c < num_cols; ++c) {
+            // Build U+2500 (BOX DRAWINGS LIGHT HORIZONTAL) repeated for column width + padding
+            std::string bar;
+            bar.reserve((col_width[c] + 2) * 3);
+            for (size_t i = 0; i < col_width[c] + 2; ++i) {
+                bar += "\xe2\x94\x80";  // U+2500 BOX DRAWINGS LIGHT HORIZONTAL
+            }
+            parts.push_back(ftxui::text(bar) | t.table_border);
+            if (c + 1 < num_cols) {
+                parts.push_back(ftxui::text("\xe2\x94\xbc") | t.table_border);
+                // U+253C BOX DRAWINGS LIGHT VERTICAL AND HORIZONTAL
+            }
+        }
+        return ftxui::hbox(std::move(parts));
+    };
+
+    ftxui::Elements rows_el;
+
+    for (auto const& row : header_texts) {
+        rows_el.push_back(build_row_element(row, true, theme));
+    }
+
+    if (!header_texts.empty() && !body_texts.empty()) {
+        rows_el.push_back(build_separator(theme));
+    }
+
+    for (auto const& row : body_texts) {
+        rows_el.push_back(build_row_element(row, false, theme));
+    }
+
+    if (rows_el.empty()) return ftxui::text("");
+    return ftxui::vbox(std::move(rows_el));
+}
+
 ftxui::Element build_code_block(ASTNode const& node, Theme const& theme) {
     auto sanitized_code = normalize_emoji_width(node.text);
     std::string_view code = sanitized_code;
@@ -454,6 +570,13 @@ ftxui::Element build_node(ASTNode const& node, int depth, int qd, int mqd,
         return ftxui::separator();
     case NodeType::Image:
         return build_image(node, depth, qd, mqd, links, focused_link, theme);
+    case NodeType::Table:
+        return build_table(node, theme);
+    case NodeType::TableRow:
+    case NodeType::TableCell:
+        // These are handled inside build_table; if encountered standalone,
+        // fall back to plain text.
+        return ftxui::text(collect_text(node));
     case NodeType::Text:
         return ftxui::text(normalize_emoji_width(node.text));
     case NodeType::SoftBreak:
